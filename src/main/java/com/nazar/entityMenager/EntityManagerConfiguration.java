@@ -6,7 +6,7 @@ public final class EntityManagerConfiguration {
     private final String user;
     private final String password;
 
-    private EntityManagerConfiguration(EntityManagerConfigurationBuilder builder){
+    private EntityManagerConfiguration(EntityManagerConfigurationBuilder builder) {
         this.entityPackage = builder.entityPackage;
         this.URL = builder.URL;
         this.user = builder.user;
@@ -56,7 +56,7 @@ public final class EntityManagerConfiguration {
             return this;
         }
 
-        public EntityManagerConfiguration build(){
+        public EntityManagerConfiguration build() {
             return new EntityManagerConfiguration(this);
         }
     }

@@ -1,16 +1,14 @@
 package com.nazar.entityMenager;
 
-import com.nazar.annotations.Column;
-import com.nazar.annotations.Entity;
+import com.nazar.entityMenager.sql.QueryBuilder;
+import com.nazar.entityMenager.sql.VeryBadClass;
 
-import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.URL;
 import java.sql.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
-public class EntityManager implements CrudOperations {
+public class EntityManager implements DbOperations {
     private EntityManagerConfiguration configuration;
     private Connection connection;
 
@@ -35,241 +33,196 @@ public class EntityManager implements CrudOperations {
         this.configuration = configuration;
     }
 
-    public void prepareForSaving() throws IOException {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        String path = configuration.getEntityPackage().replace('.', '/');
-        Enumeration resources = classLoader.getResources(path);
-        while (resources.hasMoreElements()) {
-            URL resource = (URL) resources.nextElement();
-            File packagePath = new File(resource.getFile());
-            List<Class> classes = getAllClasses(packagePath);
-
-        }
-    }
-
-    private List<Class> getAllClasses(File packagePath) {
-        List<Class> classes = new ArrayList<>();
-        File[] files = packagePath.listFiles();
-        for (File file : files) {
-            if (file.getName().endsWith(".class")) {
-                System.out.println(file);
-                try {
-                    String fileName = retrieveRealClassNameFromFilePath(file);
-                    if (!fileName.equals("")) {
-                        Class clazz = Class.forName(configuration.getEntityPackage() + "." + fileName);
-                        classes.add(clazz);
-                    }
-                } catch (ClassNotFoundException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return classes;
-    }
-
-    private String retrieveRealClassNameFromFilePath(File file) {
-        String classFormat = ".class";
-        String fileName = "";
-        if (file.getName().contains(classFormat)) {
-            fileName = file.getName().substring(0, file.getName().length() - 6);
-        }
-        return fileName;
-    }
-
-    /*private List<Class> getAllEntities(){
-        File directory
-    }*/
-
-
-    private boolean isEntity(Object object) {
-        boolean isEntity = false;
-        Class clazz = object.getClass();
-        if (clazz.isAnnotationPresent(Entity.class)) {
-            isEntity = true;
-        }
-        return isEntity;
-    }
-
-
-   /* private TableDescription getColumnNames(Object object, TableDescription tableDescription){
-        Field[] fields = object.getClass().getDeclaredFields();
-        for (Field field : fields) {
-            if (field.isAnnotationPresent(Column.class)) {
-                field.setAccessible(true);
-                tableDescription.addColumnName(field.getName());
-            }
-        }
-        return tableDescription;
-    }*/
 
     @Override
-    public boolean create(Object object) {
-        Connection connection = openConnection();
-        TableDescription tableDescription = new TableDescription(object);
-
-        String row = "";
-        ArrayList<String> columnList = new ArrayList<>();
-        for (String columnName : tableDescription.getColumnNames()) {
-            row = columnName + " " + defineSqlType(tableDescription, columnName);
-            columnList.add(row);
+    public boolean create(Class clazz) {
+        if (TableDescription.isNotEntity(clazz)) {
+            return false;
         }
-        String columns = String.join(",", columnList);
-        String query = "CREATE TABLE IF NOT EXISTS " + tableDescription.getTableName() + " (" +
-                columns + ", "
-                + "PRIMARY KEY (" + tableDescription.getPrimaryKey() + ")"
 
-
-                + ");";
+        Connection connection = openConnection();
+        TableDescription tableDescription = new TableDescription(clazz);
+        QueryBuilder builder = new QueryBuilder();
+        String query = builder.createTable(true)
+                .setTableName(tableDescription.getTableName())
+                .addColumns(tableDescription)
+                .build();
         try {
             Statement statement = connection.createStatement();
             statement.execute(query);
         } catch (SQLException e) {
             e.printStackTrace();
+            return false;
         }
-
         return true;
     }
 
-    private String defineSqlType(TableDescription tableDescription, String columnName) {
-        String sqlType = "";
-        TableDescription.ColumnDescription columnDescription = tableDescription.getColums().get(columnName);
-        String type = columnDescription.getColumnTypeName();
-        switch (type) {
-            case "Integer":
-                sqlType = "INT";
-                break;
-            case "int":
-                sqlType = "INT";
-                break;
-            case "String":
-                sqlType = "Varchar(20)";
-                break;
-        }
-        return sqlType;
-    }
 
     public boolean save(Object object) {
-        if (!isEntity(object)) {
+        if (TableDescription.isNotEntity(object)) {
             return false;
         }
-        Connection connection = openConnection();
 
+        Connection connection = openConnection();
         TableDescription tableDescription = new TableDescription(object);
         String tableName = tableDescription.getTableName();
-        String columnNames = String.join(",", tableDescription.getColumnNames());
         String questionMarks = tableDescription.getQuestionMarks();
-        String query = "INSERT INTO " + tableName + "(" + columnNames + ")" + " values " + "(" + questionMarks + ")";
 
-        System.out.println(query);
-
-        PreparedStatement statement = null;
-        try {
-            statement = connection.prepareStatement(query);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-
-        int counter = 0;
-        Field[] fields = object.getClass().getDeclaredFields();
-        for (Field field : fields) {
-            if (field.isAnnotationPresent(Column.class)) {
-                try {
-                    field.setAccessible(true);
-                    Class columnValue = field.get(object).getClass();
-                    switch (columnValue.getSimpleName()) {
-                        case "Integer":
-                            statement.setInt(++counter, (Integer) field.get(object));
-                            break;
-                        case "String":
-                            statement.setString(++counter, (String) field.get(object));
-                            break;
-                    }
-                } catch (IllegalAccessException | SQLException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
+        QueryBuilder queryBuilder = new QueryBuilder();
+        String query = queryBuilder.insertInto(tableName, tableDescription.getColumnNames(), questionMarks).build();
 
         try {
+            PreparedStatement statement = connection.prepareStatement(query);
+            VeryBadClass.setValues(object, statement);
             statement.execute();
         } catch (SQLException e) {
             e.printStackTrace();
+            return false;
         }
         closeConnection();
         return true;
     }
 
-    public boolean uptate() {
-        return false;
+
+    public boolean update(Object object) {
+        if (TableDescription.isNotEntity(object)) {
+            return false;
+        }
+        Connection connection = openConnection();
+        TableDescription tableDescription = new TableDescription(object);
+        String tableName = tableDescription.getTableName();
+
+        Object primaryKeyValue = TableDescription.getPrimaryKeyValueFrom(object);
+
+        QueryBuilder queryBuilder = new QueryBuilder();
+        queryBuilder = queryBuilder.update().setTableName(tableName);
+
+        Field[] fields = object.getClass().getDeclaredFields();
+        for (int i = 0; i < tableDescription.getColumnNames().size(); i++) {
+            try {
+                Field field = fields[i];
+                field.setAccessible(true);
+                queryBuilder.set(field.getName(), field.get(object));
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
+
+        queryBuilder = queryBuilder.where(tableDescription.getPrimaryKey(), primaryKeyValue);
+        String sql = queryBuilder.build();
+
+        try {
+            Statement statement = connection.createStatement();
+            statement.execute(sql);
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+        closeConnection();
+        return true;
     }
 
 
     @Override
     public boolean delete(Class clazz, Integer id) {
-        Connection connection = openConnection();
-        Statement statement = null;
-        try {
-            statement = connection.createStatement();
-        } catch (SQLException e) {
-            e.printStackTrace();
+        if (TableDescription.isNotEntity(clazz)) {
+            return false;
         }
+        Connection connection = openConnection();
         TableDescription tableDescription = new TableDescription(clazz);
         String tableName = tableDescription.getTableName();
-        String query = "DELETE FROM " + tableName + " where id = " + id;
+
+        QueryBuilder queryBuilder = new QueryBuilder();
+        String query = queryBuilder.deleteFrom()
+                .setTableName(tableName)
+                .where(tableDescription.getPrimaryKey(), id)
+                .build();
+
         try {
+            Statement statement = connection.createStatement();
             statement.execute(query);
         } catch (SQLException e) {
             e.printStackTrace();
+            return false;
         }
         closeConnection();
         return true;
     }
 
+
     public boolean dropTable(Class clazz) {
+
         Connection connection = openConnection();
-        Statement statement = null;
         TableDescription tableDescription = new TableDescription(clazz);
-        try {
-            statement = connection.createStatement();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
         String tableName = tableDescription.getTableName();
-        String sql = "DROP TABLE " + tableName;
+
+        QueryBuilder queryBuilder = new QueryBuilder();
+        String sql = queryBuilder.dropTable().setTableName(tableName).build();
+
         try {
+            Statement statement = connection.createStatement();
             statement.execute(sql);
         } catch (SQLException e) {
             e.printStackTrace();
+            return false;
         }
         closeConnection();
         return true;
     }
 
-    public boolean get(Class clazz, Integer id) {
+    @Override
+    public <T> List<T> get(Class<T> clazz) {
         Connection connection = openConnection();
+        List<T> resultObjects = new ArrayList<>();
         TableDescription tableDescription = new TableDescription(clazz);
         String tableName = tableDescription.getTableName();
-        String sql = "SELECT * FROM " + tableName + " where id = " + id;
-        Statement statement = null;
+
+        QueryBuilder queryBuilder = new QueryBuilder();
+        String sql = queryBuilder.selectAllFrom()
+                .setTableName(tableName)
+                .build();
+
         try {
-            statement = connection.createStatement();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        try {
+            Statement statement = connection.createStatement();
             ResultSet resultSet = statement.executeQuery(sql);
-            int counter = 0;
-            Map<String, TableDescription.ColumnDescription> map = tableDescription.getColums();
-            Set<String> set = map.keySet();
-            while (resultSet.next()){
-
+            while (resultSet.next()) {
+                T object = VeryBadClass.getFromResultSet(resultSet, tableDescription, clazz);
+                resultObjects.add(object);
             }
-        } catch (SQLException e) {
+        } catch (SQLException | IllegalAccessException e) {
             e.printStackTrace();
         }
-
         closeConnection();
-        return false;
+        return resultObjects;
     }
+
+    public <T> T get(Class<T> clazz, Integer id) {
+
+        Connection connection = openConnection();
+        T object = null;
+        TableDescription tableDescription = new TableDescription(clazz);
+        String tableName = tableDescription.getTableName();
+
+        QueryBuilder queryBuilder = new QueryBuilder();
+        String sql = queryBuilder.selectAllFrom()
+                .setTableName(tableName)
+                .where(tableDescription.getPrimaryKey(), id)
+                .build();
+
+        try {
+            Statement statement = connection.createStatement();
+
+            ResultSet resultSet = statement.executeQuery(sql);
+            while (resultSet.next()) {
+                object = VeryBadClass.getFromResultSet(resultSet, tableDescription, clazz);
+            }
+        } catch (SQLException | IllegalAccessException e) {
+            e.printStackTrace();
+        }
+        closeConnection();
+        return object;
+    }
+
+
 }

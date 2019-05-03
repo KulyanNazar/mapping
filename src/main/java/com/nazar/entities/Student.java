@@ -4,9 +4,10 @@ import com.nazar.annotations.Column;
 import com.nazar.annotations.Entity;
 import com.nazar.annotations.Id;
 
-@Entity
+@Entity("dsdadas")
 public class Student {
     @Id
+    @Column
     private int id;
 
     @Column
@@ -22,6 +23,8 @@ public class Student {
         this.name = name;
         this.age = age;
     }
+
+
 
     public int getId() {
         return id;
@@ -45,5 +48,14 @@ public class Student {
 
     public void setAge(int age) {
         this.age = age;
+    }
+
+    @Override
+    public String toString() {
+        return "Student{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", age=" + age +
+                '}';
     }
 }

@@ -5,7 +5,10 @@ import com.nazar.annotations.Entity;
 import com.nazar.annotations.Id;
 
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class TableDescription {
     private Object entity;
@@ -21,9 +24,11 @@ public class TableDescription {
     }
 
     public TableDescription(Class clazz) {
+        colums = new LinkedHashMap<>();
         this.clazz = clazz;
         findTableName();
         findColumns();
+        findPrimaryKey();
     }
 
     private void init() {
@@ -32,6 +37,23 @@ public class TableDescription {
         findColumns();
         findPrimaryKey();
     }
+
+    public static boolean isNotEntity(Class clazz) {
+        boolean isEntity = true;
+        if (clazz.isAnnotationPresent(Entity.class)) {
+            isEntity = false;
+        }
+        return isEntity;
+    }
+
+    public static boolean isNotEntity(Object object) {
+        boolean isEntity = true;
+        if (object.getClass().isAnnotationPresent(Entity.class)) {
+            isEntity = false;
+        }
+        return isEntity;
+    }
+
 
     public Map<String, ColumnDescription> getColums() {
         return colums;
@@ -53,15 +75,16 @@ public class TableDescription {
         this.tableName = tableName;
     }
 
-    public Set<String> getColumnNames() {
-        return colums.keySet();
+    public List<String> getColumnNames() {
+        String[] columnNames = colums.keySet().stream().toArray(String[]::new);
+        return Arrays.asList(columnNames);
     }
 
     private void findTableName() {
         String tableName;
         Class clazz = this.clazz;
         Entity entity = (Entity) clazz.getAnnotation(Entity.class);
-        if (!entity.value().equals("")) {
+        if (!entity.value().isEmpty()) {
             tableName = entity.value();
         } else {
             tableName = clazz.getSimpleName();
@@ -75,7 +98,6 @@ public class TableDescription {
             if (field.isAnnotationPresent(Column.class)) {
                 field.setAccessible(true);
                 ColumnDescription columnDescription = new ColumnDescription();
-                System.out.println(field.getType().getSimpleName() + " < -------------------------------------");
                 columnDescription.setColumnType(field.getType().getSimpleName());
                 this.colums.put(field.getName(), columnDescription);
             }
@@ -83,7 +105,7 @@ public class TableDescription {
     }
 
     private void findPrimaryKey() {
-        Field[] fields = entity.getClass().getDeclaredFields();
+        Field[] fields = clazz.getDeclaredFields();
         for (Field field : fields) {
             if (field.isAnnotationPresent(Id.class)) {
                 field.setAccessible(true);
@@ -92,29 +114,24 @@ public class TableDescription {
         }
     }
 
-   /* private void findColumnValues() {
-        Field[] fields = entity.getClass().getDeclaredFields();
+    public static Object getPrimaryKeyValueFrom(Object object) {
+        TableDescription tableDescription = new TableDescription(object);
+        Class clazz = object.getClass();
+        Field[] fields = clazz.getDeclaredFields();
+        Object primaryKeyValue = null;
         for (Field field : fields) {
-            if (field.isAnnotationPresent(Column.class)) {
+            field.setAccessible(true);
+            if (field.getName().equals(tableDescription.getPrimaryKey())) {
                 try {
-
-                    Class columnValue = field.get(entity).getClass();
-                    switch (columnValue.getSimpleName()) {
-                        case "Integer":
-                            statement.setInt(++counter, (Integer) field.get(object));
-                            break;
-                        case "String":
-                            statement.setString(++counter, (String) field.get(object));
-                            break;
-                    }
-                } catch (IllegalAccessException | SQLException e) {
+                    primaryKeyValue = field.get(object);
+                } catch (IllegalAccessException e) {
                     e.printStackTrace();
                 }
             }
         }
-    }
-*/
+        return primaryKeyValue;
 
+    }
 
     public String getQuestionMarks() {
         return getQuestionMarksAccordingToQuantityOfColumn();

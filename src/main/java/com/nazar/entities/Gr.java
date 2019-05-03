@@ -16,6 +16,9 @@ public class Gr {
     @Column
     private Integer quantity;
 
+    public Gr() {
+    }
+
     public Gr(String name, int quantity) {
         this.name = name;
         this.quantity = quantity;
@@ -43,5 +46,14 @@ public class Gr {
 
     public void setQuantity(int quantity) {
         this.quantity = quantity;
+    }
+
+    @Override
+    public String toString() {
+        return "Gr{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", quantity=" + quantity +
+                '}';
     }
 }

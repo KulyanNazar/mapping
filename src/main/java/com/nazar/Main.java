@@ -15,7 +15,7 @@ public class Main {
 
         EntityManager entityManager = new EntityManager(configuration);
         //Student student = new Student("cccc", 8);
-        entityManager.dropTable(Gr.class);
-
+        Gr gr = new Gr("aaddaaaa",1);
+        entityManager.save(gr);
     }
 }
