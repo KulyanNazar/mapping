@@ -5,6 +5,8 @@ import com.nazar.entityMenager.EntityManager;
 import com.nazar.entityMenager.EntityManagerConfiguration;
 
 public class Main {
+    
+    //triger 
     public static void main(String[] args) {
         EntityManagerConfiguration configuration = new EntityManagerConfiguration.EntityManagerConfigurationBuilder()
                 .setEntityPackage("com.nazar.entities")
